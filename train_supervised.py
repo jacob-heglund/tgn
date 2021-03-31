@@ -6,6 +6,7 @@ import random
 import argparse
 import pickle
 from pathlib import Path
+import pdb
 
 import torch
 import numpy as np
@@ -115,18 +116,20 @@ logger.addHandler(fh)
 logger.addHandler(ch)
 logger.info(args)
 
+# process data
 full_data, node_features, edge_features, train_data, val_data, test_data = \
   get_data_node_classification(DATA, use_validation=args.use_validation)
-
+pdb.set_trace()
 max_idx = max(full_data.unique_nodes)
 
+# this is used in the model to find neighboring nodes across time
 train_ngh_finder = get_neighbor_finder(train_data, uniform=UNIFORM, max_node_idx=max_idx)
 
 # Set device
 device_string = 'cuda:{}'.format(GPU) if torch.cuda.is_available() else 'cpu'
 device = torch.device(device_string)
 
-# Compute time statistics
+# Compute time statistics (used in model for predicting at specific times in the future)
 mean_time_shift_src, std_time_shift_src, mean_time_shift_dst, std_time_shift_dst = \
   compute_time_statistics(full_data.sources, full_data.destinations, full_data.timestamps)
 
@@ -155,7 +158,7 @@ for i in range(args.n_runs):
 
   num_instance = len(train_data.sources)
   num_batch = math.ceil(num_instance / BATCH_SIZE)
-  
+
   logger.debug('Num of training instances: {}'.format(num_instance))
   logger.debug('Num of batches per epoch: {}'.format(num_batch))
 
@@ -177,7 +180,7 @@ for i in range(args.n_runs):
   early_stopper = EarlyStopMonitor(max_round=args.patience)
   for epoch in range(args.n_epoch):
     start_epoch = time.time()
-    
+
     # Initialize memory of the model at each epoch
     if USE_MEMORY:
       tgn.memory.__init_memory__()
@@ -185,7 +188,7 @@ for i in range(args.n_runs):
     tgn = tgn.eval()
     decoder = decoder.train()
     loss = 0
-    
+
     for k in range(num_batch):
       s_idx = k * BATCH_SIZE
       e_idx = min(num_instance, s_idx + BATCH_SIZE)
@@ -197,6 +200,9 @@ for i in range(args.n_runs):
       labels_batch = train_data.labels[s_idx: e_idx]
 
       size = len(sources_batch)
+
+      # remember they aren't training the model on the supervised problem, only using the loaded model weights from the self-supervised pre-training, then they're only training a small, 3-layer MLP here
+      # to train the entire model in the supervised setting, you would simply remove the torch.no_grad and make the MLP part of an output layer / decoder of the model so everything is trained end-to-end
 
       decoder_optimizer.zero_grad()
       with torch.no_grad():
@@ -213,6 +219,7 @@ for i in range(args.n_runs):
       decoder_loss.backward()
       decoder_optimizer.step()
       loss += decoder_loss.item()
+
     train_losses.append(loss / num_batch)
 
     val_auc = eval_node_classification(tgn, decoder, val_data, full_data.edge_idxs, BATCH_SIZE,
@@ -227,7 +234,7 @@ for i in range(args.n_runs):
     }, open(results_path, "wb"))
 
     logger.info(f'Epoch {epoch}: train loss: {loss / num_batch}, val auc: {val_auc}, time: {time.time() - start_epoch}')
-  
+
   if args.use_validation:
     if early_stopper.early_stop_check(val_auc):
       logger.info('No improvement over {} epochs, stop training'.format(early_stopper.max_round))
@@ -248,7 +255,7 @@ for i in range(args.n_runs):
     # If we are not using a validation set, the test performance is just the performance computed
     # in the last epoch
     test_auc = val_aucs[-1]
-    
+
   pickle.dump({
     "val_aps": val_aucs,
     "test_ap": test_auc,

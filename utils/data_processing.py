@@ -1,7 +1,7 @@
 import numpy as np
 import random
 import pandas as pd
-
+import pdb
 
 class Data:
   def __init__(self, sources, destinations, timestamps, edge_idxs, labels):
@@ -16,6 +16,7 @@ class Data:
 
 
 def get_data_node_classification(dataset_name, use_validation=False):
+
   ### Load data and train val test split
   graph_df = pd.read_csv('./data/ml_{}.csv'.format(dataset_name))
   edge_features = np.load('./data/ml_{}.npy'.format(dataset_name))
@@ -51,14 +52,21 @@ def get_data_node_classification(dataset_name, use_validation=False):
 
 def get_data(dataset_name, different_new_nodes_between_val_and_test=False, randomize_features=False):
   ### Load data and train val test split
+
+  # this is the next step of processing after preprocess_data.py
   graph_df = pd.read_csv('./data/ml_{}.csv'.format(dataset_name))
   edge_features = np.load('./data/ml_{}.npy'.format(dataset_name))
-  node_features = np.load('./data/ml_{}_node.npy'.format(dataset_name)) 
-    
+  node_features = np.load('./data/ml_{}_node.npy'.format(dataset_name))
+
   if randomize_features:
     node_features = np.random.rand(node_features.shape[0], node_features.shape[1])
 
+  # validation starts 70% of the way through the dataset and ends at 85%, test dataset starts at 85%
+  # train/val/test = 70%, 15%, 15%
   val_time, test_time = list(np.quantile(graph_df.ts, [0.70, 0.85]))
+
+  # sources are users who interact with data
+  # destinations are items they interact with
 
   sources = graph_df.u.values
   destinations = graph_df.i.values

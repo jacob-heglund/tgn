@@ -11,6 +11,7 @@ from modules.memory_updater import get_memory_updater
 from modules.embedding_module import get_embedding_module
 from model.time_encoding import TimeEncode
 
+import pdb
 
 class TGN(torch.nn.Module):
   def __init__(self, neighbor_finder, node_features, edge_features, device, n_layers=2,
@@ -33,7 +34,6 @@ class TGN(torch.nn.Module):
 
     self.node_raw_features = torch.from_numpy(node_features.astype(np.float32)).to(device)
     self.edge_raw_features = torch.from_numpy(edge_features.astype(np.float32)).to(device)
-
     self.n_node_features = self.node_raw_features.shape[1]
     self.n_nodes = self.node_raw_features.shape[0]
     self.n_edge_features = self.edge_raw_features.shape[1]
@@ -95,8 +95,9 @@ class TGN(torch.nn.Module):
 
     # MLP to compute probability on an edge given two node embeddings
     self.affinity_score = MergeLayer(self.n_node_features, self.n_node_features,
-                                     self.n_node_features,
-                                     1)
+                                    self.n_node_features,
+                                    1)
+
 
   def compute_temporal_embeddings(self, source_nodes, destination_nodes, negative_nodes, edge_times,
                                   edge_idxs, n_neighbors=20):
@@ -120,6 +121,8 @@ class TGN(torch.nn.Module):
 
     memory = None
     time_diffs = None
+
+    # get memory from before the current timestep
     if self.use_memory:
       if self.memory_update_at_start:
         # Update memory for all nodes with messages stored in previous batches
@@ -129,8 +132,8 @@ class TGN(torch.nn.Module):
         memory = self.memory.get_memory(list(range(self.n_nodes)))
         last_update = self.memory.last_update
 
-      ### Compute differences between the time the memory of a node was last updated,
-      ### and the time for which we want to compute the embedding of a node
+      # Compute differences between the time the memory of a node was last updated,
+      # and the time for which we want to compute the embedding of a node
       source_time_diffs = torch.LongTensor(edge_times).to(self.device) - last_update[
         source_nodes].long()
       source_time_diffs = (source_time_diffs - self.mean_time_shift_src) / self.std_time_shift_src
@@ -144,7 +147,9 @@ class TGN(torch.nn.Module):
       time_diffs = torch.cat([source_time_diffs, destination_time_diffs, negative_time_diffs],
                              dim=0)
 
-    # Compute the embeddings using the embedding module
+    #TODO where are the node / edge features? shouldn't they be input in the compute_embedding function?
+    # Compute the embeddings using the embedding module, combines memory + current batch of interactions
+    pdb.set_trace()
     node_embedding = self.embedding_module.compute_embedding(memory=memory,
                                                              source_nodes=nodes,
                                                              timestamps=timestamps,
@@ -156,6 +161,7 @@ class TGN(torch.nn.Module):
     destination_node_embedding = node_embedding[n_samples: 2 * n_samples]
     negative_node_embedding = node_embedding[2 * n_samples:]
 
+    # update memory with information from current batch
     if self.use_memory:
       if self.memory_update_at_start:
         # Persist the updates to the memory only for sources and destinations (since now we have
@@ -192,6 +198,7 @@ class TGN(torch.nn.Module):
 
     return source_node_embedding, destination_node_embedding, negative_node_embedding
 
+
   def compute_edge_probabilities(self, source_nodes, destination_nodes, negative_nodes, edge_times,
                                  edge_idxs, n_neighbors=20):
     """
@@ -218,6 +225,7 @@ class TGN(torch.nn.Module):
 
     return pos_score.sigmoid(), neg_score.sigmoid()
 
+
   def update_memory(self, nodes, messages):
     # Aggregate messages for the same nodes
     unique_nodes, unique_messages, unique_timestamps = \
@@ -231,6 +239,7 @@ class TGN(torch.nn.Module):
     # Update the memory with the aggregated messages
     self.memory_updater.update_memory(unique_nodes, unique_messages,
                                       timestamps=unique_timestamps)
+
 
   def get_updated_memory(self, nodes, messages):
     # Aggregate messages for the same nodes
@@ -247,6 +256,7 @@ class TGN(torch.nn.Module):
                                                                                  timestamps=unique_timestamps)
 
     return updated_memory, updated_last_update
+
 
   def get_raw_messages(self, source_nodes, source_node_embedding, destination_nodes,
                        destination_node_embedding, edge_times, edge_idxs):
@@ -272,6 +282,7 @@ class TGN(torch.nn.Module):
       messages[source_nodes[i]].append((source_message[i], edge_times[i]))
 
     return unique_sources, messages
+
 
   def set_neighbor_finder(self, neighbor_finder):
     self.neighbor_finder = neighbor_finder

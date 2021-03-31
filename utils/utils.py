@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-
+import pdb
 
 class MergeLayer(torch.nn.Module):
   def __init__(self, dim1, dim2, dim3, dim4):
@@ -89,17 +89,24 @@ class RandEdgeSampler(object):
 
 
 def get_neighbor_finder(data, uniform, max_node_idx=None):
+  # sources are users, destinations are edited pages
   max_node_idx = max(data.sources.max(), data.destinations.max()) if max_node_idx is None else max_node_idx
   adj_list = [[] for _ in range(max_node_idx + 1)]
+
   for source, destination, edge_idx, timestamp in zip(data.sources, data.destinations,
                                                       data.edge_idxs,
                                                       data.timestamps):
+
+    # creates adjacency entries between a source and destination at a timestamp and uniquely asigns an edge index to that interaction
+    # without further processing, the resulting graph will be undirected
+    # however the paper says its directed so they probably do more processing to make the "sources" the source of the directedness, and the "destinations" the destination of the directedness
     adj_list[source].append((destination, edge_idx, timestamp))
     adj_list[destination].append((source, edge_idx, timestamp))
 
   return NeighborFinder(adj_list, uniform=uniform)
 
 
+#TODO what does this thing do
 class NeighborFinder:
   def __init__(self, adj_list, uniform=False, seed=None):
     self.node_to_neighbors = []
@@ -109,9 +116,16 @@ class NeighborFinder:
     for neighbors in adj_list:
       # Neighbors is a list of tuples (neighbor, edge_idx, timestamp)
       # We sort the list based on timestamp
+
       sorted_neighhbors = sorted(neighbors, key=lambda x: x[2])
+
+      # node_to_neighbors = list of how many times node i interacted with node j (how many times user u edited page i) sorted by timestamp
       self.node_to_neighbors.append(np.array([x[0] for x in sorted_neighhbors]))
+
+      # self.node_to_edge_idxs = list of the index of the interaction between node i and j sorted by timestamp (interaction = edge)
       self.node_to_edge_idxs.append(np.array([x[1] for x in sorted_neighhbors]))
+
+      # self.node_to_edge_timestamps = list of timestamps of when node i and j interacted (when the edges were updated)
       self.node_to_edge_timestamps.append(np.array([x[2] for x in sorted_neighhbors]))
 
     self.uniform = uniform
@@ -130,6 +144,7 @@ class NeighborFinder:
     i = np.searchsorted(self.node_to_edge_timestamps[src_idx], cut_time)
 
     return self.node_to_neighbors[src_idx][:i], self.node_to_edge_idxs[src_idx][:i], self.node_to_edge_timestamps[src_idx][:i]
+
 
   def get_temporal_neighbor(self, source_nodes, timestamps, n_neighbors=20):
     """

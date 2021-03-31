@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-
+import pdb
 from utils.utils import MergeLayer
 
 
@@ -51,14 +51,15 @@ class TemporalAttentionLayer(torch.nn.Module):
 
     query = torch.cat([src_node_features_unrolled, src_time_features], dim=2)
     key = torch.cat([neighbors_features, edge_features, neighbors_time_features], dim=2)
-
     # print(neighbors_features.shape, edge_features.shape, neighbors_time_features.shape)
+
     # Reshape tensors so to expected shape by multi head attention
     query = query.permute([1, 0, 2])  # [1, batch_size, num_of_features]
     key = key.permute([1, 0, 2])  # [n_neighbors, batch_size, num_of_features]
 
     # Compute mask of which source nodes have no valid neighbors
     invalid_neighborhood_mask = neighbors_padding_mask.all(dim=1, keepdim=True)
+
     # If a source node has no valid neighbor, set it's first neighbor to be valid. This will
     # force the attention to just 'attend' on this neighbor (which has the same features as all
     # the others since they are fake neighbors) and will produce an equivalent result to the
@@ -67,13 +68,11 @@ class TemporalAttentionLayer(torch.nn.Module):
 
     # print(query.shape, key.shape)
 
-    attn_output, attn_output_weights = self.multi_head_target(query=query, key=key, value=key,
-                                                              key_padding_mask=neighbors_padding_mask)
+    attn_output, attn_output_weights = self.multi_head_target(query=query, key=key, value=key,key_padding_mask=neighbors_padding_mask)
 
     # mask = torch.unsqueeze(neighbors_padding_mask, dim=2)  # mask [B, N, 1]
     # mask = mask.permute([0, 2, 1])
-    # attn_output, attn_output_weights = self.multi_head_target(q=query, k=key, v=key,
-    #                                                           mask=mask)
+    # attn_output, attn_output_weights = self.multi_head_target(q=query, k=key, v=key, mask=mask)
 
     attn_output = attn_output.squeeze()
     attn_output_weights = attn_output_weights.squeeze()

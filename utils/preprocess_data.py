@@ -3,9 +3,10 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import argparse
-
+import pdb
 
 def preprocess(data_name):
+  # extracts raw data from a csv and formats it nicely in a dataframe
   u_list, i_list, ts_list, label_list = [], [], [], []
   feat_l = []
   idx_list = []
@@ -37,6 +38,7 @@ def preprocess(data_name):
 
 
 def reindex(df, bipartite=True):
+  # switches a dataframe from 0-indexing to 1-indexing
   new_df = df.copy()
   if bipartite:
     assert (df.u.max() - df.u.min() + 1 == len(df.u.unique()))
@@ -49,6 +51,7 @@ def reindex(df, bipartite=True):
     new_df.u += 1
     new_df.i += 1
     new_df.idx += 1
+
   else:
     new_df.u += 1
     new_df.i += 1
@@ -58,12 +61,25 @@ def reindex(df, bipartite=True):
 
 
 def run(data_name, bipartite=True):
+  # Jacob's notes
+  # rand_feat isn't loaded anywhere, not sure why its here
+  # df columns
+  ## u = user ID
+  ## i = item that the user interacted with
+  ### graph is bipartite b/c items don't interact with users lol
+  ## ts = timestamp that user u interacted with object i (in seconds since some arbitrary starting point)
+  ## idx = index of interaction event (1-indexed)
+  # edge features are LIWC (linguistic inquiry and word count) of the user u's edit to page i for wikipedia. Similar with Reddit and Twitter, but they're posts on the site. It's just a feature vector based on the words they edit / post, don't worry about it too much
+
   Path("data/").mkdir(parents=True, exist_ok=True)
   PATH = './data/{}.csv'.format(data_name)
   OUT_DF = './data/ml_{}.csv'.format(data_name)
-  OUT_FEAT = './data/ml_{}.npy'.format(data_name)
-  OUT_NODE_FEAT = './data/ml_{}_node.npy'.format(data_name)
 
+  # edge features
+  OUT_FEAT = './data/ml_{}.npy'.format(data_name)
+
+  # node features (none for these datasets)
+  OUT_NODE_FEAT = './data/ml_{}_node.npy'.format(data_name)
   df, feat = preprocess(PATH)
   new_df = reindex(df, bipartite)
 
@@ -77,6 +93,8 @@ def run(data_name, bipartite=True):
   np.save(OUT_FEAT, feat)
   np.save(OUT_NODE_FEAT, rand_feat)
 
+
+###################################
 parser = argparse.ArgumentParser('Interface for TGN data preprocessing')
 parser.add_argument('--data', type=str, help='Dataset name (eg. wikipedia or reddit)',
                     default='wikipedia')
